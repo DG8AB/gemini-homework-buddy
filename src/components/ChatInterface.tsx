@@ -29,6 +29,7 @@ const ChatInterface = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; conversationId: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -56,7 +57,7 @@ const ChatInterface = () => {
       messages: [{
         id: crypto.randomUUID(),
         role: 'ai',
-        content: "Hi! I'm Helper, created by Dhruv Gowda to guide you through your homework. Let's work through this together—what are you stuck on?",
+        content: "Hi! I'm Helper, created by Dhruv Gowda to guide you through your homework. I won't give you direct answers—instead, I'll help you think through problems step by step. What are you working on?",
         timestamp: new Date()
       }],
       timestamp: new Date()
@@ -65,6 +66,40 @@ const ChatInterface = () => {
     setConversations(prev => [newConversation, ...prev]);
     setActiveConversationId(newConversation.id);
   };
+
+  const deleteConversation = (conversationId: string) => {
+    setConversations(prev => prev.filter(c => c.id !== conversationId));
+    
+    if (activeConversationId === conversationId) {
+      const remainingConversations = conversations.filter(c => c.id !== conversationId);
+      if (remainingConversations.length > 0) {
+        setActiveConversationId(remainingConversations[0].id);
+      } else {
+        createNewConversation();
+      }
+    }
+    setContextMenu(null);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, conversationId: string) => {
+    e.preventDefault();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      conversationId
+    });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu(null);
+  };
+
+  // Close context menu when clicking outside
+  React.useEffect(() => {
+    const handleClick = () => closeContextMenu();
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
 
   const handleSendMessage = async () => {
     if (!message.trim() && !selectedImage) return;
@@ -99,7 +134,7 @@ const ChatInterface = () => {
       const aiMessage: Message = {
         id: crypto.randomUUID(),
         role: 'ai',
-        content: "I understand you need help with this problem. Let me break it down step by step and guide you through the solution. What specific part are you finding challenging?",
+        content: "I understand you need help with this problem. Instead of giving you the answer directly, let me guide you through the thinking process. What do you think the first step should be? What information do you already have?",
         timestamp: new Date()
       };
 
@@ -162,6 +197,7 @@ const ChatInterface = () => {
                       : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"
                   )}
                   onClick={() => setActiveConversationId(conv.id)}
+                  onContextMenu={(e) => handleContextMenu(e, conv.id)}
                 >
                   <div className="truncate">{conv.title}</div>
                 </Button>
@@ -187,7 +223,17 @@ const ChatInterface = () => {
                 <h1 className="text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">
                   Helper
                 </h1>
-                <p className="text-sm text-muted-foreground">By Dhruv Gowda</p>
+                <p className="text-sm text-muted-foreground">
+                  By{' '}
+                  <a 
+                    href="https://dhruv.ftp.sh" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-accent hover:text-accent-foreground transition-colors underline underline-offset-2"
+                  >
+                    Dhruv Gowda
+                  </a>
+                </p>
               </div>
             </div>
             
@@ -347,6 +393,25 @@ const ChatInterface = () => {
           </div>
         </Card>
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 bg-card border border-border rounded-lg shadow-lg py-2 min-w-[120px]"
+          style={{
+            left: contextMenu.x,
+            top: contextMenu.y,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="w-full px-4 py-2 text-left text-sm hover:bg-destructive hover:text-destructive-foreground transition-colors"
+            onClick={() => deleteConversation(contextMenu.conversationId)}
+          >
+            Delete Chat
+          </button>
+        </div>
+      )}
     </div>
   );
 };
