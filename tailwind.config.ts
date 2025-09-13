@@ -15,21 +15,38 @@ export default {
     extend: {
       colors: {
         border: "hsl(var(--border))",
+        "border-glass": "hsl(var(--border-glass))",
         input: "hsl(var(--input))",
+        "input-focus": "hsl(var(--input-focus))",
         ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
+        background: {
+          DEFAULT: "hsl(var(--background))",
+          secondary: "hsl(var(--background-secondary))",
+          tertiary: "hsl(var(--background-tertiary))",
+        },
         foreground: "hsl(var(--foreground))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
+          glow: "hsl(var(--primary-glow))",
+          dark: "hsl(var(--primary-dark))",
           foreground: "hsl(var(--primary-foreground))",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
+          glow: "hsl(var(--secondary-glow))",
           foreground: "hsl(var(--secondary-foreground))",
         },
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
+        },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
         },
         muted: {
           DEFAULT: "hsl(var(--muted))",
@@ -37,6 +54,7 @@ export default {
         },
         accent: {
           DEFAULT: "hsl(var(--accent))",
+          glow: "hsl(var(--accent-glow))",
           foreground: "hsl(var(--accent-foreground))",
         },
         popover: {
@@ -45,6 +63,7 @@ export default {
         },
         card: {
           DEFAULT: "hsl(var(--card))",
+          glass: "hsl(var(--card-glass))",
           foreground: "hsl(var(--card-foreground))",
         },
         sidebar: {
@@ -58,10 +77,48 @@ export default {
           ring: "hsl(var(--sidebar-ring))",
         },
       },
+      backgroundImage: {
+        "gradient-primary": "var(--gradient-primary)",
+        "gradient-secondary": "var(--gradient-secondary)",
+        "gradient-cosmic": "var(--gradient-cosmic)",
+        "gradient-glass": "var(--gradient-glass)",
+      },
+      boxShadow: {
+        "glow": "var(--shadow-glow)",
+        "glass": "var(--shadow-glass)",
+        "elegant": "var(--shadow-elegant)",
+      },
+      transitionTimingFunction: {
+        "smooth": "var(--transition-smooth)",
+        "spring": "var(--transition-spring)",
+      },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        lg: "var(--radius-lg)",
+        DEFAULT: "var(--radius)",
+        md: "calc(var(--radius) - 4px)",
+        sm: "calc(var(--radius) - 8px)",
+        full: "var(--radius-full)",
+      },
+      backdropBlur: {
+        glass: "20px",
+      },
+      fontFamily: {
+        sans: [
+          "Inter",
+          "-apple-system",
+          "BlinkMacSystemFont",
+          "Segoe UI",
+          "Roboto",
+          "sans-serif",
+        ],
+        mono: [
+          "JetBrains Mono",
+          "SF Mono",
+          "Monaco",
+          "Inconsolata",
+          "Fira Code",
+          "monospace",
+        ],
       },
       keyframes: {
         "accordion-down": {
