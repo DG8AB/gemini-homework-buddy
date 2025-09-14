@@ -4,8 +4,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Send, Camera, X, Plus, Sparkles } from 'lucide-react';
+import { Send, Camera, X, Plus, Sparkles, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import EmailComposer from './EmailComposer';
+import ContactSelector from './ContactSelector';
 
 interface Message {
   id: string;
@@ -23,6 +28,8 @@ interface Conversation {
 }
 
 const ChatInterface = () => {
+  const { user, signOut } = useAuth();
+  const { toast } = useToast();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
@@ -30,6 +37,9 @@ const ChatInterface = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; conversationId: string } | null>(null);
+  const [emailComposer, setEmailComposer] = useState<{ isOpen: boolean; contacts: any[] }>({ isOpen: false, contacts: [] });
+  const [contactSelector, setContactSelector] = useState<{ isOpen: boolean; contacts: any[]; position: { x: number; y: number } }>({ isOpen: false, contacts: [], position: { x: 0, y: 0 } });
+  const [gmailAccessToken, setGmailAccessToken] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -101,6 +111,98 @@ const ChatInterface = () => {
     return () => document.removeEventListener('click', handleClick);
   }, []);
 
+  // Save conversations to database
+  useEffect(() => {
+    if (conversations.length > 0 && user) {
+      conversations.forEach(async (conv) => {
+        await supabase
+          .from('chat_histories')
+          .upsert({
+            user_id: user.id,
+            conversation_id: conv.id,
+            title: conv.title,
+            messages: JSON.stringify(conv.messages),
+          }, { onConflict: 'conversation_id' });
+      });
+    }
+  }, [conversations, user]);
+
+  // Get Gmail access token
+  const getGmailAccess = async () => {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          scopes: 'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/directory.readonly',
+          redirectTo: window.location.origin
+        }
+      });
+      
+      if (error) throw error;
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to get Gmail access: " + error.message,
+      });
+    }
+  };
+
+  // Search directory for contacts
+  const searchDirectory = async (query: string) => {
+    if (!gmailAccessToken) {
+      await getGmailAccess();
+      return [];
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke('get-directory', {
+        body: { query, accessToken: gmailAccessToken }
+      });
+
+      if (error) throw error;
+      return data.contacts || [];
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to search directory: " + error.message,
+      });
+      return [];
+    }
+  };
+
+  // Send email via Gmail
+  const sendEmail = async (to: string, subject: string, body: string) => {
+    if (!gmailAccessToken) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Gmail access required to send emails.",
+      });
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke('send-gmail', {
+        body: { to, subject, body, accessToken: gmailAccessToken }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Email sent!",
+        description: `Email sent successfully to ${to}`,
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to send email: " + error.message,
+      });
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!message.trim() && !selectedImage) return;
     if (!activeConversationId) return;
@@ -129,12 +231,48 @@ const ChatInterface = () => {
     setSelectedImage(null);
     setIsLoading(true);
 
-    // Simulate AI response
+    // Handle email requests
+    if (message.toLowerCase().includes('send') && message.toLowerCase().includes('email')) {
+      const emailMatch = message.match(/send.*email.*to\s+([^.]+)/i);
+      if (emailMatch) {
+        const contactName = emailMatch[1].trim();
+        const contacts = await searchDirectory(contactName);
+        
+        if (contacts.length > 1) {
+          // Multiple contacts found, show selector
+          setContactSelector({
+            isOpen: true,
+            contacts,
+            position: { x: 300, y: 200 }
+          });
+          return;
+        } else if (contacts.length === 1) {
+          // Single contact found, open email composer
+          setEmailComposer({
+            isOpen: true,
+            contacts: [contacts[0]]
+          });
+          return;
+        }
+      }
+    }
+
+    // Simulate AI response with strict no-answers policy
     setTimeout(() => {
+      let aiResponse = "I understand you need help with this problem. Instead of giving you the answer directly, let me guide you through the thinking process. What do you think the first step should be? What information do you already have?";
+      
+      // Check for homework-related keywords and be extra strict
+      const homeworkKeywords = ['answer', 'solution', 'solve', 'homework', 'assignment', 'test', 'quiz', 'exam'];
+      const hasHomeworkContent = homeworkKeywords.some(keyword => message.toLowerCase().includes(keyword));
+      
+      if (hasHomeworkContent) {
+        aiResponse = "I can see this is related to your studies! Remember, I'm here to guide your learning, not to provide direct answers. Let's break this down together - what specific part are you finding challenging? What have you tried so far?";
+      }
+
       const aiMessage: Message = {
         id: crypto.randomUUID(),
         role: 'ai',
-        content: "I understand you need help with this problem. Instead of giving you the answer directly, let me guide you through the thinking process. What do you think the first step should be? What information do you already have?",
+        content: aiResponse,
         timestamp: new Date()
       };
 
@@ -173,7 +311,7 @@ const ChatInterface = () => {
         isSidebarOpen ? "w-80" : "w-0"
       )}>
         <Card className="h-full glass border-0 rounded-none backdrop-blur-glass">
-          <div className="p-6 border-b border-border-glass">
+           <div className="p-6 border-b border-border-glass space-y-3">
             <Button 
               onClick={createNewConversation}
               className="w-full bg-gradient-primary hover:shadow-glow transition-all duration-300 font-medium"
@@ -181,6 +319,15 @@ const ChatInterface = () => {
             >
               <Plus className="w-5 h-5 mr-3" />
               New Chat
+            </Button>
+            <Button 
+              onClick={signOut}
+              variant="outline"
+              className="w-full transition-all duration-300"
+              size="sm"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
             </Button>
           </div>
           
@@ -412,6 +559,26 @@ const ChatInterface = () => {
           </button>
         </div>
       )}
+
+      {/* Email Composer */}
+      <EmailComposer
+        isOpen={emailComposer.isOpen}
+        onClose={() => setEmailComposer({ isOpen: false, contacts: [] })}
+        selectedContacts={emailComposer.contacts}
+        onSendEmail={sendEmail}
+      />
+
+      {/* Contact Selector */}
+      <ContactSelector
+        isOpen={contactSelector.isOpen}
+        contacts={contactSelector.contacts}
+        onSelectContact={(contact) => {
+          setEmailComposer({ isOpen: true, contacts: [contact] });
+          setContactSelector({ isOpen: false, contacts: [], position: { x: 0, y: 0 } });
+        }}
+        onClose={() => setContactSelector({ isOpen: false, contacts: [], position: { x: 0, y: 0 } })}
+        position={contactSelector.position}
+      />
     </div>
   );
 };
