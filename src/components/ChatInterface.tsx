@@ -245,6 +245,7 @@ const ChatInterface = () => {
             contacts,
             position: { x: 300, y: 200 }
           });
+          setIsLoading(false);
           return;
         } else if (contacts.length === 1) {
           // Single contact found, open email composer
@@ -252,6 +253,7 @@ const ChatInterface = () => {
             isOpen: true,
             contacts: [contacts[0]]
           });
+          setIsLoading(false);
           return;
         }
       }
@@ -282,7 +284,30 @@ const ChatInterface = () => {
           : conv
       ));
       setIsLoading(false);
-    }, 1500);
+    } catch (error: any) {
+      console.error('Error calling Gemini API:', error);
+      
+      // Fallback response on error
+      const fallbackMessage: Message = {
+        id: crypto.randomUUID(),
+        role: 'ai',
+        content: "I'm having some trouble right now, but I'm still here to help! Let's work through this step by step. What specific part of the problem are you finding challenging?",
+        timestamp: new Date()
+      };
+
+      setConversations(prev => prev.map(conv => 
+        conv.id === activeConversationId 
+          ? { ...conv, messages: [...conv.messages, fallbackMessage] }
+          : conv
+      ));
+      setIsLoading(false);
+      
+      toast({
+        variant: "destructive",
+        title: "Connection Error",
+        description: "Having trouble connecting to AI service, but I can still help guide your learning!",
+      });
+    }
   };
 
   const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
