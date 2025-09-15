@@ -259,18 +259,26 @@ const ChatInterface = () => {
       }
     }
 
-    // Simulate AI response with strict no-answers policy
-    setTimeout(() => {
-      let aiResponse = "I understand you need help with this problem. Instead of giving you the answer directly, let me guide you through the thinking process. What do you think the first step should be? What information do you already have?";
-      
-      // Check for homework-related keywords and be extra strict
-      const homeworkKeywords = ['answer', 'solution', 'solve', 'homework', 'assignment', 'test', 'quiz', 'exam'];
-      const hasHomeworkContent = homeworkKeywords.some(keyword => message.toLowerCase().includes(keyword));
-      
-      if (hasHomeworkContent) {
-        aiResponse = "I can see this is related to your studies! Remember, I'm here to guide your learning, not to provide direct answers. Let's break this down together - what specific part are you finding challenging? What have you tried so far?";
+    // Call Gemini API for AI response
+    try {
+      const { data, error } = await supabase.functions.invoke('chat-gemini', {
+        body: {
+          message,
+          image: selectedImage,
+          conversationHistory: activeConversation.messages.map(msg => ({
+            role: msg.role,
+            content: msg.content,
+            image: msg.image
+          }))
+        }
+      });
+
+      if (error) {
+        throw new Error(error.message);
       }
 
+      const aiResponse = data.response || data.fallbackResponse || "I'm here to help guide your learning! What specific part of this problem would you like to work through together?";
+      
       const aiMessage: Message = {
         id: crypto.randomUUID(),
         role: 'ai',
