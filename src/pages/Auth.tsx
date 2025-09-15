@@ -24,7 +24,7 @@ const Auth = () => {
         email,
         password,
         options: {
-          emailRedirectTo: 'https://helpersh.vercel.app/',
+          emailRedirectTo: `${window.location.origin}/`,
         },
       });
 
@@ -74,7 +74,7 @@ const Auth = () => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: 'https://helpersh.vercel.app/',
+          redirectTo: `${window.location.origin}/`,
         },
       });
 
