@@ -134,7 +134,7 @@ const ChatInterface = () => {
         provider: 'google',
         options: {
           scopes: 'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/directory.readonly',
-          redirectTo: `${window.location.origin}/`
+          redirectTo: 'https://helpersh.vercel.app/'
         }
       });
       
