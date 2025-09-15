@@ -67,7 +67,7 @@ const ChatInterface = () => {
       messages: [{
         id: crypto.randomUUID(),
         role: 'ai',
-        content: "Hi! I'm Helper, created by Dhruv Gowda to guide you through your homework. I won't give you direct answers—instead, I'll help you think through problems step by step. What are you working on?",
+        content: "Hi! I'm Helper, created by Dhruv Gowda. I'm here to help you with any questions or tasks you have. What can I assist you with today?",
         timestamp: new Date()
       }],
       timestamp: new Date()
@@ -277,7 +277,7 @@ const ChatInterface = () => {
         throw new Error(error.message);
       }
 
-      const aiResponse = data.response || data.fallbackResponse || "I'm here to help guide your learning! What specific part of this problem would you like to work through together?";
+      const aiResponse = data.response || data.fallbackResponse || "I'm here to help! What would you like to know or discuss?";
       
       const aiMessage: Message = {
         id: crypto.randomUUID(),
@@ -299,7 +299,7 @@ const ChatInterface = () => {
       const fallbackMessage: Message = {
         id: crypto.randomUUID(),
         role: 'ai',
-        content: "I'm having some trouble right now, but I'm still here to help! Let's work through this step by step. What specific part of the problem are you finding challenging?",
+        content: "I'm having some trouble right now, but I'm still here to help! What would you like to know or discuss?",
         timestamp: new Date()
       };
 
@@ -313,7 +313,7 @@ const ChatInterface = () => {
       toast({
         variant: "destructive",
         title: "Connection Error",
-        description: "Having trouble connecting to AI service, but I can still help guide your learning!",
+        description: "Having trouble connecting to AI service, but I'm still here to help!",
       });
     }
   };

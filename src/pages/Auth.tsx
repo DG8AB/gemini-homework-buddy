@@ -96,7 +96,7 @@ const Auth = () => {
             Welcome to Helper
           </CardTitle>
           <CardDescription>
-            Created by{' '}
+            Your AI assistant created by{' '}
             <a 
               href="https://dhruv.ftp.sh" 
               target="_blank" 
