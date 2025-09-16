@@ -416,10 +416,13 @@ const ChatInterface = () => {
     <div className="flex h-screen bg-gradient-cosmic overflow-hidden">
       {/* Sidebar */}
       <div className={cn(
-        "flex-shrink-0 transition-all duration-300 ease-spring",
+        "flex-shrink-0 transition-all duration-300 ease-spring overflow-hidden",
         isSidebarOpen ? "w-80" : "w-0"
       )}>
-        <Card className="h-full glass border-0 rounded-none backdrop-blur-glass">
+        <Card className={cn(
+          "h-full glass border-0 rounded-none backdrop-blur-glass transition-opacity duration-300",
+          isSidebarOpen ? "opacity-100" : "opacity-0"
+        )}>
            <div className="p-6 border-b border-border-glass space-y-3">
             <Button 
               onClick={createNewConversation}
