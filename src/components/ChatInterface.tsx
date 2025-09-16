@@ -360,12 +360,12 @@ const ChatInterface = () => {
         timestamp: new Date()
       };
 
-      const updatedConversations = conversations.map(conv => 
+      const finalConversations = updatedConversations.map(conv => 
         conv.id === activeConversationId 
           ? { ...conv, messages: [...conv.messages, aiMessage] }
           : conv
       );
-      setConversations(updatedConversations);
+      setConversations(finalConversations);
       setIsLoading(false);
     } catch (error: any) {
       console.error('Error calling Gemini API:', error);
@@ -378,12 +378,12 @@ const ChatInterface = () => {
         timestamp: new Date()
       };
 
-      const updatedConversations = conversations.map(conv => 
+      const finalConversations = updatedConversations.map(conv => 
         conv.id === activeConversationId 
           ? { ...conv, messages: [...conv.messages, fallbackMessage] }
           : conv
       );
-      setConversations(updatedConversations);
+      setConversations(finalConversations);
       setIsLoading(false);
       
       toast({
