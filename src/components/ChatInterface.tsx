@@ -43,6 +43,32 @@ const ChatInterface = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Save to localStorage for guests, Supabase for logged in users
+  const saveConversations = (convs: Conversation[]) => {
+    localStorage.setItem('chat_conversations', JSON.stringify(convs));
+  };
+
+  // Load from localStorage for guests
+  const loadConversations = (): Conversation[] => {
+    try {
+      const saved = localStorage.getItem('chat_conversations');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.map((conv: any) => ({
+          ...conv,
+          timestamp: new Date(conv.timestamp),
+          messages: conv.messages.map((msg: any) => ({
+            ...msg,
+            timestamp: new Date(msg.timestamp)
+          }))
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading conversations from localStorage:', error);
+    }
+    return [];
+  };
+
   const activeConversation = conversations.find(c => c.id === activeConversationId);
 
   const scrollToBottom = () => {
@@ -53,12 +79,42 @@ const ChatInterface = () => {
     scrollToBottom();
   }, [activeConversation?.messages]);
 
+  // Load conversations on mount
   useEffect(() => {
-    // Create initial conversation
-    if (conversations.length === 0) {
-      createNewConversation();
+    if (user) {
+      // Load from Supabase for logged in users
+      const loadFromSupabase = async () => {
+        const { data, error } = await supabase
+          .from('chat_histories')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('updated_at', { ascending: false });
+
+        if (!error && data && data.length > 0) {
+          const loadedConversations = data.map(record => ({
+            id: record.conversation_id,
+            title: record.title,
+            messages: typeof record.messages === 'string' ? JSON.parse(record.messages) : record.messages,
+            timestamp: new Date(record.updated_at)
+          }));
+          setConversations(loadedConversations);
+          setActiveConversationId(loadedConversations[0].id);
+        } else {
+          createNewConversation();
+        }
+      };
+      loadFromSupabase();
+    } else {
+      // Load from localStorage for guests
+      const savedConversations = loadConversations();
+      if (savedConversations.length > 0) {
+        setConversations(savedConversations);
+        setActiveConversationId(savedConversations[0].id);
+      } else {
+        createNewConversation();
+      }
     }
-  }, []);
+  }, [user]);
 
   const createNewConversation = () => {
     const newConversation: Conversation = {
@@ -73,20 +129,32 @@ const ChatInterface = () => {
       timestamp: new Date()
     };
 
-    setConversations(prev => [newConversation, ...prev]);
+    const updatedConversations = [newConversation, ...conversations];
+    setConversations(updatedConversations);
     setActiveConversationId(newConversation.id);
+    
+    // Save to localStorage for guests
+    if (!user) {
+      saveConversations(updatedConversations);
+    }
   };
 
   const deleteConversation = (conversationId: string) => {
-    setConversations(prev => prev.filter(c => c.id !== conversationId));
+    const updatedConversations = conversations.filter(c => c.id !== conversationId);
+    setConversations(updatedConversations);
     
     if (activeConversationId === conversationId) {
-      const remainingConversations = conversations.filter(c => c.id !== conversationId);
-      if (remainingConversations.length > 0) {
-        setActiveConversationId(remainingConversations[0].id);
+      if (updatedConversations.length > 0) {
+        setActiveConversationId(updatedConversations[0].id);
       } else {
         createNewConversation();
+        return;
       }
+    }
+    
+    // Save to localStorage for guests, Supabase will auto-sync for logged in users
+    if (!user) {
+      saveConversations(updatedConversations);
     }
     setContextMenu(null);
   };
@@ -111,19 +179,24 @@ const ChatInterface = () => {
     return () => document.removeEventListener('click', handleClick);
   }, []);
 
-  // Save conversations to database
+  // Save conversations to database and localStorage
   useEffect(() => {
-    if (conversations.length > 0 && user) {
-      conversations.forEach(async (conv) => {
-        await supabase
-          .from('chat_histories')
-          .upsert({
-            user_id: user.id,
-            conversation_id: conv.id,
-            title: conv.title,
-            messages: JSON.stringify(conv.messages),
-          }, { onConflict: 'conversation_id' });
-      });
+    if (conversations.length > 0) {
+      if (user) {
+        // Save to Supabase for logged in users
+        conversations.forEach(async (conv) => {
+          await supabase
+            .from('chat_histories')
+            .upsert({
+              user_id: user.id,
+              conversation_id: conv.id,
+              title: conv.title,
+              messages: JSON.stringify(conv.messages),
+            }, { onConflict: 'conversation_id' });
+        });
+      }
+      // Always save to localStorage as well
+      saveConversations(conversations);
     }
   }, [conversations, user]);
 
@@ -216,7 +289,7 @@ const ChatInterface = () => {
     };
 
     // Update conversation with user message
-    setConversations(prev => prev.map(conv => 
+    const updatedConversations = conversations.map(conv => 
       conv.id === activeConversationId 
         ? { 
             ...conv, 
@@ -225,7 +298,8 @@ const ChatInterface = () => {
             timestamp: new Date()
           }
         : conv
-    ));
+    );
+    setConversations(updatedConversations);
 
     setMessage('');
     setSelectedImage(null);
@@ -286,11 +360,12 @@ const ChatInterface = () => {
         timestamp: new Date()
       };
 
-      setConversations(prev => prev.map(conv => 
+      const updatedConversations = conversations.map(conv => 
         conv.id === activeConversationId 
           ? { ...conv, messages: [...conv.messages, aiMessage] }
           : conv
-      ));
+      );
+      setConversations(updatedConversations);
       setIsLoading(false);
     } catch (error: any) {
       console.error('Error calling Gemini API:', error);
@@ -303,11 +378,12 @@ const ChatInterface = () => {
         timestamp: new Date()
       };
 
-      setConversations(prev => prev.map(conv => 
+      const updatedConversations = conversations.map(conv => 
         conv.id === activeConversationId 
           ? { ...conv, messages: [...conv.messages, fallbackMessage] }
           : conv
-      ));
+      );
+      setConversations(updatedConversations);
       setIsLoading(false);
       
       toast({
@@ -353,15 +429,17 @@ const ChatInterface = () => {
               <Plus className="w-5 h-5 mr-3" />
               New Chat
             </Button>
-            <Button 
-              onClick={signOut}
-              variant="outline"
-              className="w-full transition-all duration-300"
-              size="sm"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Sign Out
-            </Button>
+            {user && (
+              <Button 
+                onClick={signOut}
+                variant="outline"
+                className="w-full transition-all duration-300"
+                size="sm"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Sign Out
+              </Button>
+            )}
           </div>
           
           <ScrollArea className="flex-1 p-4 custom-scrollbar">
@@ -417,16 +495,51 @@ const ChatInterface = () => {
               </div>
             </div>
             
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </Button>
+            <div className="flex items-center space-x-3">
+              {!user ? (
+                <Button
+                  onClick={() => window.location.href = '/auth'}
+                  variant="outline"
+                  size="sm"
+                  className="text-sm"
+                >
+                  <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
+                    <path
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                      fill="#4285F4"
+                    />
+                    <path
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                      fill="#34A853"
+                    />
+                    <path
+                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                      fill="#FBBC05"
+                    />
+                    <path
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                      fill="#EA4335"
+                    />
+                  </svg>
+                  Login with Google
+                </Button>
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  Welcome, {user.user_metadata?.full_name || user.email}
+                </div>
+              )}
+              
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </Button>
+            </div>
           </div>
         </Card>
 

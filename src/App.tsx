@@ -34,7 +34,7 @@ const App = () => {
           <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/findhistory" element={<FindHistory />} />
-            <Route path="/" element={user ? <Index /> : <Auth />} />
+            <Route path="/" element={<Index />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
