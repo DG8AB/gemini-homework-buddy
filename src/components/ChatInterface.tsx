@@ -181,22 +181,47 @@ const ChatInterface = () => {
 
   // Save conversations to database and localStorage
   useEffect(() => {
-    if (conversations.length > 0) {
-      if (user) {
-        // Save to Supabase for logged in users
-        conversations.forEach(async (conv) => {
-          await supabase
-            .from('chat_histories')
-            .upsert({
-              user_id: user.id,
-              conversation_id: conv.id,
-              title: conv.title,
-              messages: JSON.stringify(conv.messages),
-            }, { onConflict: 'conversation_id' });
-        });
+    const saveConversationsToSupabase = async () => {
+      if (conversations.length > 0 && user) {
+        try {
+          // Use Promise.all to properly handle async operations
+          await Promise.all(
+            conversations.map(async (conv) => {
+              const { error } = await supabase
+                .from('chat_histories')
+                .upsert({
+                  user_id: user.id,
+                  conversation_id: conv.id,
+                  title: conv.title,
+                  messages: JSON.stringify(conv.messages),
+                }, { 
+                  onConflict: 'conversation_id'
+                });
+              
+              if (error) {
+                console.error('Error saving conversation to Supabase:', error);
+                toast({
+                  variant: "destructive",
+                  title: "Error",
+                  description: "Failed to save conversation to cloud storage",
+                });
+              }
+            })
+          );
+        } catch (error) {
+          console.error('Error saving conversations:', error);
+        }
       }
-      // Always save to localStorage as well
+    };
+
+    if (conversations.length > 0) {
+      // Always save to localStorage
       saveConversations(conversations);
+      
+      // Save to Supabase for logged in users
+      if (user) {
+        saveConversationsToSupabase();
+      }
     }
   }, [conversations, user]);
 
