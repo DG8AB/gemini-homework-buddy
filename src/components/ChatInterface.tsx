@@ -3,21 +3,32 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Send, Camera, X, Plus, Sparkles, LogOut } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
-import EmailComposer from './EmailComposer';
+import { cn } from '@/lib/utils';
+import { 
+  Send, 
+  Image as ImageIcon, 
+  Plus, 
+  User, 
+  Sparkles, 
+  MoreVertical, 
+  Trash2, 
+  X, 
+  Menu, 
+  ChevronLeft,
+  LogOut
+} from 'lucide-react';
 import ContactSelector from './ContactSelector';
+import EmailComposer from './EmailComposer';
 
 interface Message {
   id: string;
-  role: 'user' | 'ai';
+  role: 'user' | 'assistant';
   content: string;
-  image?: string;
   timestamp: Date;
+  image?: string;
 }
 
 interface Conversation {
@@ -27,7 +38,7 @@ interface Conversation {
   timestamp: Date;
 }
 
-const ChatInterface = () => {
+const ChatInterface: React.FC = () => {
   const { user, signOut } = useAuth();
   const { toast } = useToast();
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -35,13 +46,14 @@ const ChatInterface = () => {
   const [message, setMessage] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; conversationId: string } | null>(null);
   const [emailComposer, setEmailComposer] = useState<{ isOpen: boolean; contacts: any[] }>({ isOpen: false, contacts: [] });
   const [contactSelector, setContactSelector] = useState<{ isOpen: boolean; contacts: any[]; position: { x: number; y: number } }>({ isOpen: false, contacts: [], position: { x: 0, y: 0 } });
   const [gmailAccessToken, setGmailAccessToken] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Save to localStorage for guests, Supabase for logged in users
   const saveConversations = (convs: Conversation[]) => {
@@ -49,12 +61,12 @@ const ChatInterface = () => {
   };
 
   // Load from localStorage for guests
-  const loadConversations = (): Conversation[] => {
+  const loadConversations = () => {
     try {
       const saved = localStorage.getItem('chat_conversations');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return parsed.map((conv: any) => ({
+        const convs = parsed.map((conv: any) => ({
           ...conv,
           timestamp: new Date(conv.timestamp),
           messages: conv.messages.map((msg: any) => ({
@@ -62,122 +74,99 @@ const ChatInterface = () => {
             timestamp: new Date(msg.timestamp)
           }))
         }));
+        setConversations(convs);
+        
+        if (convs.length > 0 && !activeConversationId) {
+          setActiveConversationId(convs[0].id);
+        }
       }
     } catch (error) {
-      console.error('Error loading conversations from localStorage:', error);
+      console.error('Error loading conversations:', error);
     }
-    return [];
   };
-
-  const activeConversation = conversations.find(c => c.id === activeConversationId);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [activeConversation?.messages]);
-
-  // Load conversations on mount
-  useEffect(() => {
-    if (user) {
-      // Load from Supabase for logged in users
-      const loadFromSupabase = async () => {
-        const { data, error } = await supabase
-          .from('chat_histories')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('updated_at', { ascending: false });
-
-        if (!error && data && data.length > 0) {
-          const loadedConversations = data.map(record => ({
-            id: record.conversation_id,
-            title: record.title,
-            messages: typeof record.messages === 'string' ? JSON.parse(record.messages) : record.messages,
-            timestamp: new Date(record.updated_at)
-          }));
-          setConversations(loadedConversations);
-          setActiveConversationId(loadedConversations[0].id);
-        } else {
-          createNewConversation();
-        }
-      };
-      loadFromSupabase();
-    } else {
-      // Load from localStorage for guests
-      const savedConversations = loadConversations();
-      if (savedConversations.length > 0) {
-        setConversations(savedConversations);
-        setActiveConversationId(savedConversations[0].id);
-      } else {
-        createNewConversation();
-      }
-    }
-  }, [user]);
-
   const createNewConversation = () => {
-    const newConversation: Conversation = {
+    const newConv: Conversation = {
       id: crypto.randomUUID(),
       title: 'New Chat',
-      messages: [{
-        id: crypto.randomUUID(),
-        role: 'ai',
-        content: "Hi! I'm Helper, created by Dhruv Gowda. I'm here to help you with any questions or tasks you have. What can I assist you with today?",
-        timestamp: new Date()
-      }],
+      messages: [],
       timestamp: new Date()
     };
-
-    const updatedConversations = [newConversation, ...conversations];
-    setConversations(updatedConversations);
-    setActiveConversationId(newConversation.id);
     
-    // Save to localStorage for guests
-    if (!user) {
-      saveConversations(updatedConversations);
+    const updatedConversations = [newConv, ...conversations];
+    setConversations(updatedConversations);
+    setActiveConversationId(newConv.id);
+    setMessage('');
+    setSelectedImage(null);
+    
+    // Close sidebar on mobile after creating new chat
+    if (window.innerWidth < 768) {
+      setIsSidebarOpen(false);
     }
   };
 
-  const deleteConversation = (conversationId: string) => {
-    const updatedConversations = conversations.filter(c => c.id !== conversationId);
-    setConversations(updatedConversations);
+  const deleteConversation = (convId: string) => {
+    const filtered = conversations.filter(c => c.id !== convId);
+    setConversations(filtered);
     
-    if (activeConversationId === conversationId) {
-      if (updatedConversations.length > 0) {
-        setActiveConversationId(updatedConversations[0].id);
+    if (activeConversationId === convId) {
+      if (filtered.length > 0) {
+        setActiveConversationId(filtered[0].id);
       } else {
         createNewConversation();
-        return;
       }
     }
-    
-    // Save to localStorage for guests, Supabase will auto-sync for logged in users
-    if (!user) {
-      saveConversations(updatedConversations);
+    setContextMenu(null);
+  };
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setSelectedImage(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
     }
-    setContextMenu(null);
   };
 
-  const handleContextMenu = (e: React.MouseEvent, conversationId: string) => {
-    e.preventDefault();
-    setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      conversationId
-    });
-  };
+  // Handle window resize for responsive sidebar
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setIsSidebarOpen(true);
+      } else {
+        setIsSidebarOpen(false);
+      }
+    };
 
-  const closeContextMenu = () => {
-    setContextMenu(null);
-  };
-
-  // Close context menu when clicking outside
-  React.useEffect(() => {
-    const handleClick = () => closeContextMenu();
-    document.addEventListener('click', handleClick);
-    return () => document.removeEventListener('click', handleClick);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    // Initialize conversations when component mounts or user changes
+    loadConversations();
+  }, [user]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [conversations, activeConversationId]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      setContextMenu(null);
+    };
+
+    if (contextMenu) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [contextMenu]);
 
   // Save conversations to database and localStorage
   useEffect(() => {
@@ -404,7 +393,7 @@ const ChatInterface = () => {
         body: {
           message,
           image: selectedImage,
-          conversationHistory: activeConversation.messages.map(msg => ({
+          conversationHistory: updatedConversations.find(c => c.id === activeConversationId)!.messages.map(msg => ({
             role: msg.role,
             content: msg.content,
             image: msg.image
@@ -413,386 +402,393 @@ const ChatInterface = () => {
       });
 
       if (error) {
-        throw new Error(error.message);
+        throw error;
       }
 
-      const aiResponse = data.response || data.fallbackResponse || "I'm here to help! What would you like to know or discuss?";
-      
-      const aiMessage: Message = {
-        id: crypto.randomUUID(),
-        role: 'ai',
-        content: aiResponse,
-        timestamp: new Date()
-      };
+      if (data && data.response) {
+        const aiMessage: Message = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: data.response,
+          timestamp: new Date()
+        };
 
-      const finalConversations = updatedConversations.map(conv => 
-        conv.id === activeConversationId 
-          ? { ...conv, messages: [...conv.messages, aiMessage] }
-          : conv
-      );
-      setConversations(finalConversations);
-      setIsLoading(false);
+        // Add AI response to conversations
+        const finalConversations = updatedConversations.map(conv => 
+          conv.id === activeConversationId 
+            ? { ...conv, messages: [...conv.messages, aiMessage] }
+            : conv
+        );
+        setConversations(finalConversations);
+      }
     } catch (error: any) {
       console.error('Error calling Gemini API:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to get AI response. Please try again.",
+      });
       
-      // Fallback response on error
-      const fallbackMessage: Message = {
+      // Add error message to conversation
+      const errorMessage: Message = {
         id: crypto.randomUUID(),
-        role: 'ai',
-        content: "I'm having some trouble right now, but I'm still here to help! What would you like to know or discuss?",
+        role: 'assistant',
+        content: "I'm sorry, I encountered an error while processing your request. Please try again.",
         timestamp: new Date()
       };
 
       const finalConversations = updatedConversations.map(conv => 
         conv.id === activeConversationId 
-          ? { ...conv, messages: [...conv.messages, fallbackMessage] }
+          ? { ...conv, messages: [...conv.messages, errorMessage] }
           : conv
       );
       setConversations(finalConversations);
+    } finally {
       setIsLoading(false);
-      
-      toast({
-        variant: "destructive",
-        title: "Connection Error",
-        description: "Having trouble connecting to AI service, but I'm still here to help!",
-      });
     }
   };
 
-  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setSelectedImage(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
+  const activeConversation = conversations.find(c => c.id === activeConversationId) || {
+    id: '',
+    title: 'New Chat',
+    messages: [],
+    timestamp: new Date()
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
+  // Create initial conversation if none exist
+  useEffect(() => {
+    if (conversations.length === 0) {
+      createNewConversation();
     }
-  };
+  }, []);
 
   return (
     <div className="flex h-screen bg-gradient-cosmic overflow-hidden">
+      {/* Mobile Header */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-xl border-b border-border/50 p-4">
+        <div className="flex items-center justify-between">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+          <h1 className="text-lg font-semibold">Helper</h1>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={createNewConversation}
+          >
+            <Plus className="h-5 w-5" />
+          </Button>
+        </div>
+      </div>
+
       {/* Sidebar */}
       <div className={cn(
         "flex-shrink-0 transition-all duration-300 ease-spring overflow-hidden",
-        isSidebarOpen ? "w-80" : "w-0"
+        "md:relative fixed inset-y-0 left-0 z-40",
+        isSidebarOpen ? "w-80" : "w-0",
+        "md:block", // Always visible on desktop
+        !isSidebarOpen && "md:w-0" // But still collapsible
       )}>
+        {/* Mobile backdrop */}
+        {isSidebarOpen && (
+          <div 
+            className="md:hidden fixed inset-0 bg-black/50 z-30"
+            onClick={() => setIsSidebarOpen(false)}
+          />
+        )}
         <Card className={cn(
-          "h-full glass border-0 rounded-none backdrop-blur-glass transition-opacity duration-300",
-          isSidebarOpen ? "opacity-100" : "opacity-0"
+          "h-full glass border-0 rounded-none backdrop-blur-glass transition-opacity duration-300 relative z-40",
+          isSidebarOpen ? "opacity-100" : "opacity-0",
+          "md:mt-0 mt-16" // Account for mobile header
         )}>
            <div className="p-6 border-b border-border-glass space-y-3">
             <Button 
               onClick={createNewConversation}
-              className="w-full bg-gradient-primary hover:shadow-glow transition-all duration-300 font-medium"
-              size="lg"
+              className="w-full bg-gradient-primary hover:opacity-90 transition-all duration-200 shadow-elegant text-white border-0"
             >
-              <Plus className="w-5 h-5 mr-3" />
+              <Plus className="mr-2 h-4 w-4" />
               New Chat
             </Button>
-            {user && (
-              <Button 
-                onClick={signOut}
-                variant="outline"
-                className="w-full transition-all duration-300"
-                size="sm"
-              >
-                <LogOut className="w-4 h-4 mr-2" />
-                Sign Out
-              </Button>
-            )}
+            
+            {/* Desktop-only close button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsSidebarOpen(false)}
+              className="hidden md:flex w-full justify-center"
+            >
+              <ChevronLeft className="h-4 w-4 mr-2" />
+              Collapse
+            </Button>
           </div>
-          
-          <ScrollArea className="flex-1 p-4 custom-scrollbar">
-            <div className="space-y-2">
+
+          <ScrollArea className="flex-1">
+            <div className="p-3 space-y-2">
               {conversations.map((conv) => (
-                <Button
+                <div
                   key={conv.id}
-                  variant={conv.id === activeConversationId ? "secondary" : "ghost"}
                   className={cn(
-                    "w-full justify-start text-left h-auto p-4 transition-all duration-300",
-                    conv.id === activeConversationId 
-                      ? "bg-gradient-secondary shadow-glass text-secondary-foreground" 
-                      : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"
+                    "relative group cursor-pointer rounded-lg p-3 transition-all duration-200 hover:bg-accent/50",
+                    activeConversationId === conv.id ? 'bg-gradient-primary/10 border border-primary/20' : ''
                   )}
-                  onClick={() => setActiveConversationId(conv.id)}
-                  onContextMenu={(e) => handleContextMenu(e, conv.id)}
+                  onClick={() => {
+                    setActiveConversationId(conv.id);
+                    // Close sidebar on mobile after selecting conversation
+                    if (window.innerWidth < 768) {
+                      setIsSidebarOpen(false);
+                    }
+                  }}
                 >
-                  <div className="truncate">{conv.title}</div>
-                </Button>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-sm truncate">
+                        {conv.title}
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {conv.timestamp.toLocaleDateString()}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setContextMenu({
+                          x: e.clientX,
+                          y: e.clientY,
+                          conversationId: conv.id
+                        });
+                      }}
+                    >
+                      <MoreVertical className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
               ))}
             </div>
           </ScrollArea>
         </Card>
       </div>
 
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
-        <Card className="glass border-0 rounded-none backdrop-blur-glass">
-          <div className="flex items-center justify-between p-6 border-b border-border-glass">
-            <div className="flex items-center space-x-4">
-              <div className="relative">
-                <div className="w-12 h-12 rounded-full bg-gradient-primary flex items-center justify-center shadow-glow">
-                  <Sparkles className="w-6 h-6 text-primary-foreground" />
-                </div>
-                <div className="absolute -top-1 -right-1 w-4 h-4 bg-success rounded-full border-2 border-card animate-pulse-glow"></div>
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-                  Helper
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  By{' '}
-                  <a 
-                    href="https://dhruv.ftp.sh" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-accent hover:text-accent-foreground transition-colors underline underline-offset-2"
-                  >
-                    Dhruv Gowda
-                  </a>
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex items-center space-x-3">
-              {!user ? (
-                <Button
-                  onClick={() => window.location.href = '/auth'}
-                  variant="outline"
-                  size="sm"
-                  className="text-sm"
-                >
-                  <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
-                    <path
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                      fill="#4285F4"
-                    />
-                    <path
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      fill="#34A853"
-                    />
-                    <path
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                      fill="#FBBC05"
-                    />
-                    <path
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                      fill="#EA4335"
-                    />
-                  </svg>
-                  Login with Google
-                </Button>
-              ) : (
-                <div className="text-sm text-muted-foreground">
-                  Welcome, {user.user_metadata?.full_name || user.email}
-                </div>
-              )}
-              
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </Button>
-            </div>
-          </div>
-        </Card>
-
-        {/* Messages */}
-        <ScrollArea className="flex-1 custom-scrollbar">
-          <div className="p-6 space-y-6">
-            {activeConversation?.messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={cn(
-                  "flex gap-4 animate-float-in",
-                  msg.role === 'user' ? "justify-end" : "justify-start"
-                )}
-              >
-                {msg.role === 'ai' && (
-                  <Avatar className="w-10 h-10 border-2 border-primary/20">
-                    <AvatarFallback className="bg-gradient-primary text-primary-foreground font-semibold">
-                      AI
-                    </AvatarFallback>
-                  </Avatar>
-                )}
-                
-                <div className={cn(
-                  "max-w-[70%] space-y-2",
-                  msg.role === 'user' && "order-1"
-                )}>
-                  {msg.image && (
-                    <div className="rounded-lg overflow-hidden border border-border-glass">
-                      <img 
-                        src={msg.image} 
-                        alt="Shared image" 
-                        className="max-w-full h-auto"
-                      />
-                    </div>
-                  )}
-                  
-                  <Card className={cn(
-                    "p-4 transition-all duration-300",
-                    msg.role === 'user'
-                      ? "bg-gradient-primary text-primary-foreground shadow-glow ml-auto"
-                      : "glass border-border-glass hover:shadow-glass"
-                  )}>
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                      {msg.content}
-                    </p>
-                  </Card>
-                </div>
-
-                {msg.role === 'user' && (
-                  <Avatar className="w-10 h-10 border-2 border-accent/20 order-2">
-                    <AvatarFallback className="bg-gradient-secondary text-secondary-foreground font-semibold">
-                      You
-                    </AvatarFallback>
-                  </Avatar>
-                )}
-              </div>
-            ))}
-
-            {isLoading && (
-              <div className="flex gap-4 animate-float-in">
-                <Avatar className="w-10 h-10 border-2 border-primary/20">
-                  <AvatarFallback className="bg-gradient-primary text-primary-foreground font-semibold">
-                    AI
-                  </AvatarFallback>
-                </Avatar>
-                <Card className="glass border-border-glass p-4">
-                  <div className="flex space-x-2">
-                    <div className="w-3 h-3 bg-primary rounded-full animate-pulse-glow"></div>
-                    <div className="w-3 h-3 bg-primary rounded-full animate-pulse-glow" style={{ animationDelay: '0.2s' }}></div>
-                    <div className="w-3 h-3 bg-primary rounded-full animate-pulse-glow" style={{ animationDelay: '0.4s' }}></div>
-                  </div>
-                </Card>
-              </div>
-            )}
-            
-            <div ref={messagesEndRef} />
-          </div>
-        </ScrollArea>
-
-        {/* Input Area */}
-        <Card className="glass border-0 rounded-none backdrop-blur-glass">
-          <div className="p-6 border-t border-border-glass">
-            {selectedImage && (
-              <Card className="mb-4 p-3 glass border-border-glass animate-slide-in-right">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <img 
-                      src={selectedImage} 
-                      alt="Selected" 
-                      className="w-12 h-12 rounded-lg object-cover border border-border-glass"
-                    />
-                    <span className="text-sm text-muted-foreground">Image selected</span>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setSelectedImage(null)}
-                    className="text-muted-foreground hover:text-destructive transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-              </Card>
-            )}
-
-            <div className="flex gap-3 items-end">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleImageSelect}
-                className="hidden"
-              />
-              
-              <Button
-                size="lg"
-                variant="ghost"
-                onClick={() => fileInputRef.current?.click()}
-                className="text-muted-foreground hover:text-accent hover:bg-accent/10 transition-all duration-300"
-              >
-                <Camera className="w-5 h-5" />
-              </Button>
-
-              <div className="flex-1">
-                <Textarea
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  onKeyDown={handleKeyPress}
-                  placeholder="Type your message..."
-                  className="min-h-[60px] max-h-[200px] glass border-border-glass focus:border-input-focus transition-all duration-300 resize-none"
-                  disabled={isLoading}
-                />
-              </div>
-
-              <Button
-                size="lg"
-                onClick={handleSendMessage}
-                disabled={isLoading || (!message.trim() && !selectedImage)}
-                className="bg-gradient-primary hover:shadow-glow transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Send className="w-5 h-5" />
-              </Button>
-            </div>
-          </div>
-        </Card>
-      </div>
-
       {/* Context Menu */}
       {contextMenu && (
         <div
-          className="fixed z-50 bg-card border border-border rounded-lg shadow-lg py-2 min-w-[120px]"
-          style={{
-            left: contextMenu.x,
-            top: contextMenu.y,
-          }}
-          onClick={(e) => e.stopPropagation()}
+          className="fixed z-50 bg-popover border border-border rounded-md shadow-lg py-1"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
         >
-          <button
-            className="w-full px-4 py-2 text-left text-sm hover:bg-destructive hover:text-destructive-foreground transition-colors"
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-destructive hover:text-destructive"
             onClick={() => deleteConversation(contextMenu.conversationId)}
           >
-            Delete Chat
-          </button>
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete
+          </Button>
         </div>
       )}
 
-      {/* Email Composer */}
-      <EmailComposer
-        isOpen={emailComposer.isOpen}
-        onClose={() => setEmailComposer({ isOpen: false, contacts: [] })}
-        selectedContacts={emailComposer.contacts}
-        onSendEmail={sendEmail}
-      />
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Desktop Header */}
+        <div className="hidden md:flex justify-between items-center p-6 border-b border-border-glass">
+          {!isSidebarOpen && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsSidebarOpen(true)}
+            >
+              <Menu className="h-5 w-5 mr-2" />
+              Show Sidebar
+            </Button>
+          )}
+          <div className="flex-1" />
+          <div className="flex items-center gap-2">
+            <ContactSelector 
+              isOpen={contactSelector.isOpen}
+              contacts={contactSelector.contacts}
+              position={contactSelector.position}
+              onSelectContact={(contact) => {
+                setContactSelector({ isOpen: false, contacts: [], position: { x: 0, y: 0 } });
+                setEmailComposer({ isOpen: true, contacts: [contact] });
+              }}
+              onClose={() => setContactSelector({ isOpen: false, contacts: [], position: { x: 0, y: 0 } })}
+            />
+            
+            <EmailComposer
+              isOpen={emailComposer.isOpen}
+              selectedContacts={emailComposer.contacts}
+              onClose={() => setEmailComposer({ isOpen: false, contacts: [] })}
+              onSendEmail={sendEmail}
+            />
+            
+            {user && (
+              <Button variant="outline" onClick={signOut}>
+                Sign Out
+              </Button>
+            )}
+          </div>
+        </div>
 
-      {/* Contact Selector */}
-      <ContactSelector
-        isOpen={contactSelector.isOpen}
-        contacts={contactSelector.contacts}
-        onSelectContact={(contact) => {
-          setEmailComposer({ isOpen: true, contacts: [contact] });
-          setContactSelector({ isOpen: false, contacts: [], position: { x: 0, y: 0 } });
-        }}
-        onClose={() => setContactSelector({ isOpen: false, contacts: [], position: { x: 0, y: 0 } })}
-        position={contactSelector.position}
-      />
+        {/* Messages Container */}
+        <div className="flex-1 overflow-hidden">
+          <ScrollArea className="h-full">
+            <div className="p-4 md:p-6 pb-32 md:pb-32 space-y-6">
+              {activeConversation.messages.length === 0 ? (
+                <div className="text-center text-muted-foreground mt-20">
+                  <h2 className="text-2xl md:text-3xl font-semibold mb-4">How can I help you today?</h2>
+                  <p className="text-base md:text-lg">Start a conversation by typing a message below.</p>
+                </div>
+              ) : (
+                activeConversation.messages.map((msg, index) => (
+                  <div
+                    key={msg.id}
+                    className={cn(
+                      "flex gap-3 md:gap-4",
+                      msg.role === 'user' ? 'justify-end' : 'justify-start'
+                    )}
+                  >
+                    {msg.role === 'assistant' && (
+                      <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gradient-primary flex items-center justify-center flex-shrink-0">
+                        <Sparkles className="h-4 w-4 md:h-5 md:w-5 text-white" />
+                      </div>
+                    )}
+                    <div
+                      className={cn(
+                        "max-w-[85%] md:max-w-[70%] rounded-2xl px-4 py-3 md:px-6 md:py-4",
+                        msg.role === 'user'
+                          ? 'bg-gradient-primary text-white ml-auto'
+                          : 'bg-card/50 backdrop-blur-sm border border-border/50'
+                      )}
+                    >
+                      {msg.image && (
+                        <div className="mb-3">
+                          <img 
+                            src={msg.image} 
+                            alt="Uploaded content" 
+                            className="max-w-full h-auto rounded-lg max-h-48 md:max-h-64"
+                          />
+                        </div>
+                      )}
+                      <div className="text-sm md:text-base whitespace-pre-wrap break-words">
+                        {msg.content}
+                      </div>
+                      <div className={cn(
+                        "text-xs mt-2 opacity-70",
+                        msg.role === 'user' ? 'text-white/70' : 'text-muted-foreground'
+                      )}>
+                        {msg.timestamp.toLocaleTimeString()}
+                      </div>
+                    </div>
+                    {msg.role === 'user' && (
+                      <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gradient-accent flex items-center justify-center flex-shrink-0">
+                        <User className="h-4 w-4 md:h-5 md:w-5 text-white" />
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+              
+              {isLoading && (
+                <div className="flex gap-3 md:gap-4 justify-start">
+                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gradient-primary flex items-center justify-center flex-shrink-0">
+                    <Sparkles className="h-4 w-4 md:h-5 md:w-5 text-white" />
+                  </div>
+                  <div className="bg-card/50 backdrop-blur-sm border border-border/50 rounded-2xl px-4 py-3 md:px-6 md:py-4">
+                    <div className="flex items-center gap-2">
+                      <div className="flex space-x-1">
+                        <div className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                        <div className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                        <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
+                      </div>
+                      <span className="text-sm text-muted-foreground">AI is thinking...</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div ref={messagesEndRef} />
+            </div>
+          </ScrollArea>
+        </div>
+
+        {/* Input Area */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-background/95 to-transparent backdrop-blur-xl border-t border-border/50">
+          {selectedImage && (
+            <div className="mb-4 p-3 bg-card/50 rounded-lg border border-border/50 flex items-center gap-3">
+              <img src={selectedImage} alt="Selected" className="w-12 h-12 md:w-16 md:h-16 rounded object-cover" />
+              <div className="flex-1">
+                <p className="text-sm text-muted-foreground">Image selected</p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedImage(null)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+          
+          <div className="flex gap-2 md:gap-3 items-end">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex-shrink-0"
+            >
+              <ImageIcon className="h-4 w-4" />
+            </Button>
+            
+            {/* Mobile user menu button */}
+            <div className="md:hidden">
+              {user && (
+                <Button variant="outline" size="icon" onClick={signOut}>
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+            
+            <div className="flex-1 relative">
+              <Textarea
+                ref={textareaRef}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                placeholder="Type your message... (Press Enter to send, Shift+Enter for new line)"
+                className="min-h-[60px] md:min-h-[80px] resize-none pr-12 md:pr-16 text-sm md:text-base"
+                disabled={isLoading}
+              />
+              <Button
+                onClick={handleSendMessage}
+                disabled={(!message.trim() && !selectedImage) || isLoading}
+                size="icon"
+                className="absolute right-2 bottom-2 h-8 w-8 md:h-10 md:w-10"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleImageUpload}
+            className="hidden"
+          />
+        </div>
+      </div>
     </div>
   );
 };
