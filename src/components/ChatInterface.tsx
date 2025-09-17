@@ -200,9 +200,49 @@ const ChatInterface = () => {
     }
   }, [conversations, user]);
 
+  // Initialize Gmail access token on mount and auth state changes
+  useEffect(() => {
+    const initializeGmailAccess = async () => {
+      // Check localStorage first
+      const storedToken = localStorage.getItem('gmail_access_token');
+      if (storedToken) {
+        setGmailAccessToken(storedToken);
+        return;
+      }
+
+      // Check current session for provider token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.provider_token) {
+        setGmailAccessToken(session.provider_token);
+        localStorage.setItem('gmail_access_token', session.provider_token);
+      }
+    };
+
+    initializeGmailAccess();
+
+    // Listen for auth state changes to capture new tokens
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.provider_token) {
+        setGmailAccessToken(session.provider_token);
+        localStorage.setItem('gmail_access_token', session.provider_token);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
   // Get Gmail access token
   const getGmailAccess = async () => {
     try {
+      // Check if we already have a session with Google provider token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.provider_token) {
+        setGmailAccessToken(session.provider_token);
+        localStorage.setItem('gmail_access_token', session.provider_token);
+        return session.provider_token;
+      }
+
+      // If no token, initiate OAuth
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
